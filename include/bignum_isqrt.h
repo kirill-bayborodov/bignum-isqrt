@@ -21,12 +21,17 @@
 extern "C" {
 #endif
 
+/**
+ * @brief Reports the outcome of an integer-square-root operation.
+ * @details The API is transactional: every non-success status leaves the
+ * caller-owned result record unchanged. The input is never modified.
+ */
 typedef enum bignum_isqrt_status {
-    BIGNUM_ISQRT_SUCCESS = 0,
-    BIGNUM_ISQRT_ERROR_NULL_ARG = -1,
-    BIGNUM_ISQRT_ERROR_BAD_LENGTH = -2,
-    BIGNUM_ISQRT_ERROR_OVERLAP = -3,
-    BIGNUM_ISQRT_ERROR_ARITHMETIC = -4
+    BIGNUM_ISQRT_SUCCESS = 0, /**< Input accepted; result is normalized floor(sqrt(x)). */
+    BIGNUM_ISQRT_ERROR_NULL_ARG = -1, /**< result or x is NULL; result is unchanged and retry is safe after fixing the pointer. */
+    BIGNUM_ISQRT_ERROR_BAD_LENGTH = -2, /**< len exceeds capacity or top active word is zero; result is unchanged. */
+    BIGNUM_ISQRT_ERROR_OVERLAP = -3, /**< Complete result and input byte ranges overlap; result is unchanged. */
+    BIGNUM_ISQRT_ERROR_ARITHMETIC = -4 /**< A dependency or bounded Newton guard failed; result is unchanged and retry is valid only after fixing the arithmetic/input condition. */
 } bignum_isqrt_status_t;
 
 /**

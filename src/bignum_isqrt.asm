@@ -8,7 +8,14 @@
 ; are delegated to the existing bignum modules. The public dispatcher validates
 ; NULL, byte-range overlap, capacity and normalized input before arithmetic.
 ;
-; @history
+; ABI boundary: System V AMD64 receives result in RDI and x in RSI; RAX returns
+; the signed bignum_isqrt_status_t value. RBX and R12-R15 are callee-saved and
+; preserved; RBP is used as the frame base. The stack is aligned for every call,
+; private records use 264-byte little-endian bignum_t layout, and no caller-owned
+; memory is written before successful publication. Dependency calls may clobber
+; caller-saved registers, so persistent pointers remain in R12/R13.
+;
+; Revision history:
 ; - rev. 1 (2026-08-22): Initial x86-64 YASM Newton implementation.
 ; - rev. 2 (2026-08-22): Register-stable pointers, transactional paths and
 ;                          GNU-stack metadata added.
@@ -41,8 +48,10 @@ global bignum_isqrt
 extern bignum_div_bignum
 extern bignum_add_bignum
 
+; Public symbol boundary:
 ; bignum_isqrt(bignum_t *result, const bignum_t *x)
-; rdi=result, rsi=x, rax=typed status
+; RDI=result [out], RSI=x [in], RAX=typed status; flags and caller-saved
+; registers are volatile. On every non-success path result is unchanged.
 bignum_isqrt:
     push rbp
     mov rbp, rsp
@@ -115,7 +124,7 @@ bignum_isqrt:
     mov qword [rsp + 1584], 2048
 .newton_loop:
     cmp qword [rsp + 1584], 0
-    je .publish_next_guard
+    je .error_arithmetic
     dec qword [rsp + 1584]
 
     lea rdi, [rsp + INPUT_OFF]
@@ -207,13 +216,6 @@ bignum_isqrt:
     jmp .epilogue
 .error_bad_length:
     mov eax, ERR_BAD_LENGTH
-    jmp .epilogue
-.publish_next_guard:
-    mov rdi, r12
-    lea rsi, [rsp + NEXT_OFF]
-    mov ecx, 33
-    rep movsq
-    xor eax, eax
     jmp .epilogue
 .error_arithmetic:
     mov eax, ERR_ARITHMETIC

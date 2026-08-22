@@ -12,6 +12,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+/**
+ * @brief Builds a complete valid unary-isqrt workload descriptor.
+ * @details The fixture uses fixed seed, bounded data count and supported tokens;
+ * it is the positive oracle for adapter validation and initialization.
+ */
 static benchmark_workload_t valid_workload(void)
 {
     return (benchmark_workload_t){
@@ -22,6 +27,13 @@ static benchmark_workload_t valid_workload(void)
     };
 }
 
+/**
+ * @brief Verifies benchmark adapter validation, callbacks and ownership cleanup.
+ * @details The test checks named NULL/invalid-profile statuses, deterministic
+ * initialization equality, successful operation mapping and nonzero checksum;
+ * heap buffers are released on both allocation and normal paths.
+ * @return Zero only when every adapter invariant passes.
+ */
 int main(void)
 {
     benchmark_adapter_t adapter;

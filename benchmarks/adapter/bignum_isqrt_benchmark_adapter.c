@@ -16,11 +16,23 @@
 #define ISQRT_BENCH_FNV_OFFSET UINT64_C(1469598103934665603)
 #define ISQRT_BENCH_FNV_PRIME UINT64_C(1099511628211)
 
+/**
+ * @brief Owns one immutable radicand and its mutable benchmark result.
+ * @details benchmark-core allocates and copies this complete state per dataset
+ * record and worker; the adapter does not transfer or retain its ownership.
+ */
 typedef struct bignum_isqrt_benchmark_state {
-    bignum_t x; /**< [in] Immutable radicand for this benchmark row. */
-    bignum_t result; /**< [out] Integer square root written by the operation callback. */
+    bignum_t x; /**< [in] Immutable normalized radicand valid for the callback lifetime. */
+    bignum_t result; /**< [out] Caller-independent root record written by operation callback. */
 } bignum_isqrt_benchmark_state_t;
 
+/**
+ * @brief Compares two benchmark vocabulary strings.
+ * @param[in] left Borrowed token; must be non-NULL.
+ * @param[in] right Borrowed allowed token; must be non-NULL.
+ * @param[out] equal Boolean comparison result, written on success.
+ * @return Named adapter status; outputs are unchanged on NULL input.
+ */
 static bignum_isqrt_benchmark_status_t string_equal(const char *left, const char *right,
                                                    benchmark_boolean_t *equal)
 {
@@ -29,6 +41,14 @@ static bignum_isqrt_benchmark_status_t string_equal(const char *left, const char
     return BIGNUM_ISQRT_BENCHMARK_STATUS_SUCCESS;
 }
 
+/**
+ * @brief Checks one workload axis against a NULL-terminated allowlist.
+ * @details Validation is performed before dataset initialization so generic
+ * framework tokens cannot silently acquire bignum meaning.
+ * @param[in] value Borrowed workload token.
+ * @param[in] allowed Borrowed NULL-terminated allowed-token array.
+ * @return SUCCESS when value is present in the list, otherwise INVALID_PROFILE.
+ */
 static bignum_isqrt_benchmark_status_t axis_allowed(const char *value,
                                                    const char *const *allowed)
 {
@@ -43,6 +63,13 @@ static bignum_isqrt_benchmark_status_t axis_allowed(const char *value,
     return BIGNUM_ISQRT_BENCHMARK_STATUS_INVALID_PROFILE;
 }
 
+/**
+ * @brief Advances the adapter-local deterministic xorshift generator.
+ * @details A zero state is replaced by the fixed nonzero seed before the update,
+ * preventing a permanent zero stream while preserving reproducibility.
+ * @param[in,out] state Generator state owned by the current callback invocation.
+ * @return Next deterministic 64-bit value.
+ */
 static uint64_t next_value(uint64_t *state)
 {
     if (*state == 0U) *state = UINT64_C(0x9e3779b97f4a7c15);
@@ -52,6 +79,12 @@ static uint64_t next_value(uint64_t *state)
     return *state;
 }
 
+/**
+ * @brief Selects a deterministic radicand length from workload metadata.
+ * @param[in] workload Validated immutable workload descriptor.
+ * @param[in,out] state Adapter-local deterministic generator state.
+ * @return A positive length not exceeding BIGNUM_CAPACITY.
+ */
 static size_t choose_length(const benchmark_workload_t *workload, uint64_t *state)
 {
     if (strcmp(workload->capacity_profile, "near-capacity") == 0 ||
@@ -64,6 +97,15 @@ static size_t choose_length(const benchmark_workload_t *workload, uint64_t *stat
     return 1U + (size_t)(next_value(state) % (BIGNUM_CAPACITY / 2U));
 }
 
+/**
+ * @brief Fills one benchmark radicand with deterministic normalized words.
+ * @details The zero path leaves len zero; nonzero paths force a nonzero top word
+ * so dependency modules receive canonical bignum input.
+ * @param[out] number Caller-owned state record overwritten by this helper.
+ * @param[in] length Requested active-word length within capacity.
+ * @param[in,out] state Adapter-local generator state.
+ * @param[in] zero Whether to produce the canonical zero record.
+ */
 static void fill_operand(bignum_t *number, size_t length, uint64_t *state, int zero)
 {
     memset(number, 0, sizeof(*number));
@@ -73,6 +115,12 @@ static void fill_operand(bignum_t *number, size_t length, uint64_t *state, int z
     if (number->words[number->len - 1U] == 0U) number->words[number->len - 1U] = UINT64_C(1);
 }
 
+/**
+ * @brief Initializes one immutable unary-isqrt benchmark source record.
+ * @details Sequence index and seed define deterministic length and words; result
+ * storage is cleared before benchmark-core begins warmup or measurement.
+ * @return BENCHMARK_ADAPTER_STATUS_SUCCESS or INPUT_ERROR for invalid state/workload.
+ */
 static benchmark_adapter_status_t isqrt_initialize(void *opaque, uint64_t sequence_index,
                                                    const benchmark_workload_t *workload,
                                                    void *adapter_context)
@@ -95,6 +143,12 @@ static benchmark_adapter_status_t isqrt_initialize(void *opaque, uint64_t sequen
     return BENCHMARK_ADAPTER_STATUS_SUCCESS;
 }
 
+/**
+ * @brief Executes one bignum_isqrt operation on a worker-local state.
+ * @details The callback maps the library's named status to benchmark-core's
+ * adapter status and never shares mutable result state between workers.
+ * @return Adapter SUCCESS when the library publishes a root; OPERATION_ERROR otherwise.
+ */
 static benchmark_adapter_status_t isqrt_operation(void *opaque, uint64_t iteration,
                                                   const benchmark_workload_t *workload,
                                                   void *adapter_context)
@@ -108,6 +162,13 @@ static benchmark_adapter_status_t isqrt_operation(void *opaque, uint64_t iterati
                                          : BENCHMARK_ADAPTER_STATUS_OPERATION_ERROR;
 }
 
+/**
+ * @brief Hashes complete input and result records after one operation.
+ * @details The state address is mixed after record data so MT XOR aggregation
+ * cannot cancel identical worker checksums to zero; it is benchmark observability,
+ * not algorithmic output.
+ * @return Nonzero observable checksum for a valid state, or zero for NULL state.
+ */
 static uint64_t isqrt_checksum(const void *opaque, uint64_t iteration, void *adapter_context)
 {
     const bignum_isqrt_benchmark_state_t *state = opaque;

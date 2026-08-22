@@ -9,7 +9,7 @@
  * to the published bignum modules; all intermediate records are private and
  * the caller-owned result is published only after success.
  *
- * @history
+ * Revision history:
  * - rev. 1 (2026-08-22): Initial transactional C11 Newton reference.
  */
 #include "bignum_isqrt.h"
@@ -18,6 +18,12 @@
 #include <stdint.h>
 #include <string.h>
 
+/**
+ * @brief Removes zero words above the most significant nonzero word.
+ * @details Normalization preserves the represented value and establishes the
+ * invariant required by division/comparison helpers.
+ * @param[in,out] n Private mutable record; non-NULL.
+ */
 static void isqrt_normalize(bignum_t *n)
 {
     while (n->len != 0U && n->words[n->len - 1U] == 0U) {
@@ -25,6 +31,12 @@ static void isqrt_normalize(bignum_t *n)
     }
 }
 
+/**
+ * @brief Clears unused storage words in a bignum record.
+ * @details The fixed-capacity tail is cleared before publication so callers never
+ * observe stale private data in a successful result.
+ * @param[in,out] n Private mutable record; non-NULL and capacity-valid.
+ */
 static void isqrt_clear_tail(bignum_t *n)
 {
     if (n->len < BIGNUM_CAPACITY) {
@@ -33,11 +45,24 @@ static void isqrt_clear_tail(bignum_t *n)
     }
 }
 
+/**
+ * @brief Checks the canonical length invariant of a bignum record.
+ * @param[in] n Borrowed capacity-valid record; non-NULL.
+ * @return Nonzero when len is zero or the top active word is nonzero.
+ */
 static int isqrt_normalized(const bignum_t *n)
 {
     return n->len == 0U || n->words[n->len - 1U] != 0U;
 }
 
+/**
+ * @brief Detects byte-range overlap between two complete records.
+ * @details Rejecting overlap before any write protects the transactional API and
+ * avoids undefined results for shifted aliases.
+ * @param[in] a First borrowed record range.
+ * @param[in] b Second borrowed record range.
+ * @return Nonzero when the two sizeof(bignum_t) ranges intersect.
+ */
 static int isqrt_overlaps(const bignum_t *a, const bignum_t *b)
 {
     uintptr_t ap = (uintptr_t)(const void *)a;
@@ -45,6 +70,12 @@ static int isqrt_overlaps(const bignum_t *a, const bignum_t *b)
     return ap < bp + sizeof(*b) && bp < ap + sizeof(*a);
 }
 
+/**
+ * @brief Compares two normalized non-negative records.
+ * @param[in] a First borrowed normalized record.
+ * @param[in] b Second borrowed normalized record.
+ * @return Negative, zero or positive according to a < b, a == b or a > b.
+ */
 static int isqrt_compare(const bignum_t *a, const bignum_t *b)
 {
     size_t i;
@@ -61,6 +92,11 @@ static int isqrt_compare(const bignum_t *a, const bignum_t *b)
     return 0;
 }
 
+/**
+ * @brief Computes the significant bit length of a nonzero record.
+ * @param[in] n Borrowed normalized nonzero record.
+ * @return Number of significant bits; caller guarantees len is nonzero.
+ */
 static size_t isqrt_bit_length(const bignum_t *n)
 {
     uint64_t top = n->words[n->len - 1U];
@@ -72,6 +108,11 @@ static size_t isqrt_bit_length(const bignum_t *n)
     return bits;
 }
 
+/**
+ * @brief Initializes a private record containing one selected bit.
+ * @param[out] n Private capacity-valid record overwritten and normalized.
+ * @param[in] bit Bit index in the fixed 2048-bit domain.
+ */
 static void isqrt_set_bit(bignum_t *n, size_t bit)
 {
     memset(n, 0, sizeof(*n));
@@ -79,6 +120,12 @@ static void isqrt_set_bit(bignum_t *n, size_t bit)
     n->len = (bit >> 6U) + 1U;
 }
 
+/**
+ * @brief Divides a private non-negative record by two in place.
+ * @details Words are processed high-to-low so the carry from the higher word
+ * becomes the new top bit of the lower word; the result is normalized.
+ * @param[in,out] n Private mutable capacity-valid record.
+ */
 static void isqrt_shift_right_one(bignum_t *n)
 {
     size_t i = n->len;
@@ -93,6 +140,7 @@ static void isqrt_shift_right_one(bignum_t *n)
     isqrt_normalize(n);
 }
 
+/* Public API contract is documented canonically in include/bignum_isqrt.h. */
 bignum_isqrt_status_t bignum_isqrt(bignum_t *result, const bignum_t *x)
 {
     bignum_t input;

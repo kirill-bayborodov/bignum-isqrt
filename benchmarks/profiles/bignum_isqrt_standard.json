@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Standard deterministic regression matrix for the bignum_isqrt binary Euclidean operation.",
+  "description": "Standard deterministic regression matrix for the unary bignum_isqrt Newton operation.",
   "profiles": [
     {
       "id": "zero-one-end-to-end",

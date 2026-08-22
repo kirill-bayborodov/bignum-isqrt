@@ -1,24 +1,79 @@
-# How-to: `bignum_isqrt_standard.json`
+# `bignum_isqrt_standard.json` companion guide
 
-## Назначение
+## Purpose
 
-`bignum_isqrt_standard.json` — компактная versioned matrix для функциональной проверки и регрессионного baseline операции `bignum_isqrt`. Manifest использует schema version `1`, которую читает C11-инструмент `bench_matrix` из pinned `benchmark-framework v1.0.0`.
+`bignum_isqrt_standard.json` is the project-owned compact smoke/regression manifest for `bignum_isqrt`. The C11 `bench_matrix` tool from the pinned `benchmark-framework` distribution consumes it and starts the project-owned ST and MT benchmark binaries. It is intended for repeatable functional and protocol checks, not for a full performance baseline.
 
-> Manifest не описывает generic byte-transform. Он переносит bignum semantics через нейтральные transport fields benchmark framework.
+## Location and lifecycle
 
-| JSON field | Значение в manifest | Bignum interpretation |
+The committed source is `benchmarks/profiles/bignum_isqrt_standard.json`. The maintainer owns edits to its profile set. Files under `benchmarks/reports/` are generated outputs and are not edited as source configuration. The manifest supports only `schema_version: 1`; a schema change requires a matching update to this document and the consumer validation.
+
+## Schema
+
+The root object has three required fields: `schema_version` is integer `1`, `description` is a non-empty string, and `profiles` is a non-empty array. Every profile is an object with the required string fields `id`, `input_kind`, `operation_kind`, `measure_mode`, `size_profile`, and `capacity_profile`. Profile ids must be unique.
+
+| Field | Type | Required | Meaning |
+|---|---|---:|---|
+| `schema_version` | integer | yes | Exact supported schema value: `1`. |
+| `description` | string | yes | Human-readable manifest purpose. |
+| `profiles` | array | yes | Unique, non-empty workload profile objects. |
+| `id` | string | yes | Stable identifier used in matrix output. |
+| `input_kind` | string | yes | Adapter radicand family. |
+| `operation_kind` | string | yes | Isqrt algorithm selector; one of `newton`, `isqrt`, `isqrt-mixed`; standard profiles use `newton`. |
+| `measure_mode` | string | yes | `end-to-end` or `kernel-only`. |
+| `size_profile` | string | yes | Input word-length scenario. |
+| `capacity_profile` | string | yes | Ordinary or near-capacity storage scenario. |
+
+## Vocabulary and profile table
+
+| Axis | Allowed values | Meaning |
 |---|---|---|
-| `input_kind` | `zero`, `nonzero`, `mixed` | Форма исходного `bignum_t` dataset |
-| `operation_kind` | `newton`, `newton`, `newton`, `newton`, `newton`, `newton` | Выбор representable binary isqrt amount |
-| `measure_mode` | `end-to-end`, `kernel-only` | Включает либо исключает preparation copy из timed interval |
-| `size_profile` | `one`, `quarter`, `half`, `variable`, `near-capacity` | Logical word length of input `bignum_t` |
-| `capacity_profile` | `normal`, `near-capacity` | Storage-boundary workload condition |
+| `input_kind` | `zero`, `nonzero`, `mixed` | Zero, nonzero, or deterministic mixed radicands. |
+| `operation_kind` | `newton`, `isqrt`, `isqrt-mixed` | `floor(sqrt(x))` through the same Newton implementation. |
+| `measure_mode` | `end-to-end`, `kernel-only` | Includes or excludes preparation-copy overhead. |
+| `size_profile` | `one`, `quarter`, `half`, `variable`, `near-capacity` | Logical input length in the fixed 32-word domain. |
+| `capacity_profile` | `normal`, `near-capacity` | Normal storage or a valid boundary-near input. |
 
-## Пошаговый smoke run
+The standard manifest contains eight profiles. It covers zero, one-word, quarter-word, half-word, variable, mixed and near-capacity cases. Each profile runs in both ST and MT mode, so one repetition produces `8 × 2 = 16` samples.
 
-После approved Makefile wiring adapter binaries будут передаваться C11 runner напрямую. Эквивалентная команда имеет следующую форму:
+| Profile class | Scenario | Expected status |
+|---|---|---|
+| `zero-one-end-to-end` | Zero input, one-word logical size, full lifecycle timing | Success and normalized zero result |
+| `nonzero-one-zero-kernel` | Small nonzero one-word input | Success |
+| `nonzero-one-bit-kernel` | Nonzero one-word bit-boundary input | Success |
+| `nonzero-quarter-bit-kernel` | Quarter-capacity bit-boundary input | Success |
+| `nonzero-quarter-word-kernel` | Quarter-capacity word-boundary input | Success |
+| `nonzero-half-word-kernel` | Half-capacity word-boundary input | Success |
+| `nonzero-variable-random-end-to-end` | Deterministic variable-length input | Success |
+| `near-capacity-bit-end-to-end` | Valid input close to capacity | Success |
+
+## Complete minimal example
+
+This is a complete valid schema-version-1 document accepted by the current matrix tool:
+
+```json
+{
+  "schema_version": 1,
+  "description": "Minimal bignum_isqrt standard smoke example",
+  "profiles": [
+    {
+      "id": "zero-one-end-to-end",
+      "input_kind": "zero",
+      "operation_kind": "newton",
+      "measure_mode": "end-to-end",
+      "size_profile": "one",
+      "capacity_profile": "normal"
+    }
+  ]
+}
+```
+
+## How to run
+
+After building the project, run the framework distribution directly with the project-specific manifest:
 
 ```bash
+mkdir -p benchmarks/reports
 libs/benchmark-framework/build/tools/bench_matrix \
   --manifest benchmarks/profiles/bignum_isqrt_standard.json \
   --output benchmarks/reports/bignum_isqrt_standard_matrix.json \
@@ -32,32 +87,21 @@ libs/benchmark-framework/build/tools/bench_matrix \
   --data-count 32 \
   --seed 11400714819323198485 \
   --timeout-seconds 30
-```
-
-The expected matrix contains **8 profiles × 2 modes × repetitions** samples. Every accepted sample has exactly one `benchmark=...` line before its `Benchmark finished.` marker.
-
-## Aggregation and baseline comparison
-
-Aggregate a candidate without a baseline first:
-
-```bash
 libs/benchmark-framework/build/tools/benchmark_stats \
   --input benchmarks/reports/bignum_isqrt_standard_matrix.json \
   --output benchmarks/reports/bignum_isqrt_standard_summary.json
 ```
 
-After human review, compare a later candidate to the approved matrix using identical manifests and measurement conditions:
+The expected output files are `benchmarks/reports/bignum_isqrt_standard_matrix.json` and `benchmarks/reports/bignum_isqrt_standard_summary.json`. Every successful child emits exactly one `benchmark=...` line before `Benchmark finished.`.
 
-```bash
-libs/benchmark-framework/build/tools/benchmark_stats \
-  --input benchmarks/reports/candidate_matrix.json \
-  --baseline benchmarks/reports/reviewed_baseline_matrix.json \
-  --output benchmarks/reports/candidate_summary.json \
-  --threshold-pct 5
-```
+## How to modify
 
-A changed profile set is intentionally not a valid baseline. The statistics tool returns non-zero and reports `missing_profiles` rather than treating a partial comparison as success.
+Copy a complete profile object, choose only values from the vocabulary table, assign a unique id, and add the scenario to the profile table. Validate JSON syntax, run one matrix repetition, and run `benchmark_stats` before committing. Keep the same profile set when comparing a candidate with a reviewed baseline; move a profile to the full manifest if it materially increases runtime.
 
-## Boundary case
+## Baseline and comparison
 
-`near-capacity` uses a valid source operand with a cleared high bit. It measures representable growth near `BIGNUM_CAPACITY`; it does not intentionally time the overflow error path. Overflow behavior belongs in deterministic API tests, not performance aggregates.
+The standard matrix is a smoke/regression baseline only. Candidate and baseline must use the same profile ids, build configuration, seed, thread count, iteration policy, framework version and measurement mode. A changed or incomplete profile set must be reported as `missing_profiles` and is not a valid performance comparison.
+
+## Failure handling
+
+The matrix tool rejects malformed JSON, unsupported schema versions, missing fields, duplicate ids and unsafe tokens before starting a child process. The adapter rejects `operation_kind` values outside `newton`, `isqrt` and `isqrt-mixed` and returns a named invalid-profile status; the committed standard profiles use `newton`. A child that returns nonzero, emits malformed protocol, or omits the required completion marker is recorded as a failed sample. API invalid-input behavior is tested by deterministic unit tests rather than represented as a successful benchmark profile.

@@ -323,9 +323,10 @@ Reports are written to `benchmarks/reports/`. Keep `CONFIG`, `PERF_RUNS`, data m
 
 ### Parameterized JSON matrix and regression gate
 
-`bench_matrix` invokes the pinned benchmark-core tools without Python or hardware PMU events. The full manifest covers zero, nonzero and mixed radicands, all documented operand sizes, and safe near-capacity inputs. The standard manifest is a shorter smoke matrix. Each JSON manifest has a companion `.md` document with its vocabulary and baseline workflow.
+`bench_matrix` invokes the pinned benchmark-core tools without Python or hardware PMU events. The full manifest covers zero, nonzero and mixed radicands, all documented operand sizes, and safe near-capacity inputs. The standard manifest is a shorter smoke matrix. Each JSON manifest has a companion `.md` document with its vocabulary and baseline workflow. Because the framework distribution also ships a generic example manifest, `BENCH_MATRIX_PROFILE` must select the project-owned isqrt manifest; otherwise generic `noop/xor/rotate` profiles are rejected by the isqrt adapter.
 
 ```bash
+BENCH_MATRIX_PROFILE=benchmarks/profiles/bignum_isqrt_full.json \
 make bench_matrix CONFIG=release \
   REPORT_NAME=baseline \
   BENCH_MATRIX_REPETITIONS=7 \
