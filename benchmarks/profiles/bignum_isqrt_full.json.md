@@ -80,7 +80,7 @@ Build the project normally first. For a controlled project matrix, invoke the fr
 
 ```bash
 mkdir -p benchmarks/reports
-libs/benchmark-framework/build/tools/bench_matrix \
+libs/benchmark-framework/dist/tools/bench_matrix \
   --manifest benchmarks/profiles/bignum_isqrt_full.json \
   --output benchmarks/reports/bignum_isqrt_full_matrix.json \
   --st-binary bin/bench_bignum_isqrt \
@@ -93,7 +93,7 @@ libs/benchmark-framework/build/tools/bench_matrix \
   --data-count 4096 \
   --seed 11400714819323198485 \
   --timeout-seconds 1800
-libs/benchmark-framework/build/tools/benchmark_stats \
+libs/benchmark-framework/dist/tools/benchmark_stats \
   --input benchmarks/reports/bignum_isqrt_full_matrix.json \
   --output benchmarks/reports/bignum_isqrt_full_summary.json
 ```

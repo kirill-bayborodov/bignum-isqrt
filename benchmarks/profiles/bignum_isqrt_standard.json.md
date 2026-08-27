@@ -74,7 +74,7 @@ After building the project, run the framework distribution directly with the pro
 
 ```bash
 mkdir -p benchmarks/reports
-libs/benchmark-framework/build/tools/bench_matrix \
+libs/benchmark-framework/dist/tools/bench_matrix \
   --manifest benchmarks/profiles/bignum_isqrt_standard.json \
   --output benchmarks/reports/bignum_isqrt_standard_matrix.json \
   --st-binary bin/bench_bignum_isqrt \
@@ -87,7 +87,7 @@ libs/benchmark-framework/build/tools/bench_matrix \
   --data-count 32 \
   --seed 11400714819323198485 \
   --timeout-seconds 30
-libs/benchmark-framework/build/tools/benchmark_stats \
+libs/benchmark-framework/dist/tools/benchmark_stats \
   --input benchmarks/reports/bignum_isqrt_standard_matrix.json \
   --output benchmarks/reports/bignum_isqrt_standard_summary.json
 ```
